@@ -1,0 +1,15 @@
+*.swo
+*.swp
+*ipynb_checkpoints/
+*__pycache__/
+*egg-info/
+tags*
+test_data/
+feast_data/
+results/
+scripts/
+test.png
+results/
+slurm_out/
+st3/stan/feast.hpp
+st3/stan/feast
