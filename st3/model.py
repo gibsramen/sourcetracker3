@@ -48,7 +48,7 @@ class SourceTracker:
         inf_function = partial(
             MODEL.sample,
             chains=chains,
-            iter_warmpu=iter_warmup,
+            iter_warmup=iter_warmup,
             iter_sampling=iter_sampling,
             **kwargs
         )
@@ -123,5 +123,22 @@ class STResultsMCMC(STResults):
     def __init__(self, results: list, sources: list, sinks: list):
         super().__init__(results, sources, sinks)
 
-    def to_dataframe(self, estimator: str = "mean"):
-        pass
+    def to_dataframe(self):
+        results = [
+            (
+                x.draws_pd()
+                .filter(like="mix_prop")
+                .assign(sink=sink)
+            )
+            for x, sink in zip(self.results, self.sinks)
+        ]
+        results = pd.concat(results).reset_index(names=["draw"])
+
+        num_sources = len(self.sources)
+        source_map = {
+            f"mix_prop[{i+1}]": source
+            for i, source in enumerate(self.sources)
+        }
+        source_map["mix_prop[{num_sources+1}]"] = "Unknown"
+        results = results.rename(columns=source_map)
+        return results
