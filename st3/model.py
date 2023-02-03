@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from pkg_resources import resource_filename
 from functools import partial
 from multiprocessing import Pool
@@ -30,8 +31,8 @@ class SourceTracker:
         :param source_metadata: Metadata containing information about sources
         :type source_metadata: pd.DataFrame
         """
-        self.features = source_table.ids("observation")
-        self.sources = source_table.ids("sample")
+        self.features = list(source_table.ids("observation"))
+        self.sources = list(source_table.ids("sample"))
         self.num_features, self.num_sources = source_table.shape
         self.source_data = source_table.matrix_data.toarray().T
         self.unknown_mu_prior = unknown_mu_prior
@@ -39,7 +40,8 @@ class SourceTracker:
 
     def fit_variational(self, sinks: biom.Table, jobs: int = 1, **kwargs):
         inf_function = partial(MODEL.variational, **kwargs)
-        return self._fit_multiple(sinks, jobs=jobs, inf_function=inf_function)
+        return self._fit_multiple(sinks, jobs=jobs, inf_function=inf_function,
+                                  inf_type="variational")
 
     def fit_mcmc(self, sinks: biom.Table, jobs: int = 1, chains: int = 4,
                  iter_warmup: int = 500, iter_sampling: int = 500, **kwargs):
@@ -50,9 +52,11 @@ class SourceTracker:
             iter_sampling=iter_sampling,
             **kwargs
         )
-        return self._fit_multiple(sinks, jobs=jobs, inf_function=inf_function)
+        return self._fit_multiple(sinks, jobs=jobs, inf_function=inf_function,
+                                  inf_type="mcmc")
 
-    def _fit_multiple(self, sinks: biom.Table, inf_function: Callable, jobs=1):
+    def _fit_multiple(self, sinks: biom.Table, inf_function: Callable,
+                      inf_type: str, jobs=1):
         # Make sure order of features is the same
         sink_data = (
             sinks
@@ -66,6 +70,12 @@ class SourceTracker:
                 partial(self._fit_single, inf_function=inf_function),
                 sink_data
             )
+
+        if inf_type == "mcmc":
+            results = STResultsMCMC(results, self.sources, sinks.ids())
+        if inf_type == "variational":
+            results = STResultsVariational(results, self.sources, sinks.ids())
+
         return results
 
     def _fit_single(self, sink: np.array, inf_function: Callable):
@@ -76,7 +86,42 @@ class SourceTracker:
             "y": self.source_data.astype(int),
             "unknown_mu": self.unknown_mu_prior,
             "unknown_kappa": self.unknown_kappa_prior
-
         }
         results = inf_function(data=data)
         return results
+
+
+class STResults(ABC):
+    def __init__(self, results: list, sources: list, sinks: list):
+        self.results = results
+        self.sources = sources + ["Unknown"]
+        self.sinks = sinks
+
+    def __len__(self):
+        return len(self.results)
+
+    @abstractmethod
+    def to_dataframe(self):
+        pass
+
+class STResultsVariational(STResults):
+    def __init__(self, results: list, sources: list, sinks: list):
+        super().__init__(results, sources, sinks)
+
+    def to_dataframe(self):
+        results = [
+            x.variational_params_pd.filter(like="mix_prop")
+            for x in self.results
+        ]
+        results = pd.concat(results)
+        results.columns = self.sources
+        results.index = self.sinks
+        return results
+
+
+class STResultsMCMC(STResults):
+    def __init__(self, results: list, sources: list, sinks: list):
+        super().__init__(results, sources, sinks)
+
+    def to_dataframe(self, estimator: str = "mean"):
+        pass
