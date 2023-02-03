@@ -4,7 +4,6 @@ from functools import partial
 from multiprocessing import Pool
 from typing import Callable
 
-import arviz as az
 import biom
 from cmdstanpy import CmdStanModel
 import numpy as np
@@ -33,7 +32,7 @@ class SourceTracker:
         """
         self.features = list(source_table.ids("observation"))
         self.sources = list(source_table.ids("sample"))
-        self.num_features, self.num_sources = source_table.shape
+        self.num_features = source_table.shape[0]
         self.source_data = source_table.matrix_data.toarray().T
         self.unknown_mu_prior = unknown_mu_prior
         self.unknown_kappa_prior = unknown_kappa_prior
@@ -103,6 +102,7 @@ class STResults(ABC):
     @abstractmethod
     def to_dataframe(self):
         pass
+
 
 class STResultsVariational(STResults):
     def __init__(self, results: list, sources: list, sinks: list):
