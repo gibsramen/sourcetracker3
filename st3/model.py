@@ -32,7 +32,7 @@ class SourceTracker:
         """
         self.features = list(source_table.ids("observation"))
         self.sources = list(source_table.ids("sample"))
-        self.num_features = source_table.shape[0]
+        self.num_features, self.num_sources = source_table.shape
         self.source_data = source_table.matrix_data.toarray().T
         self.unknown_mu_prior = unknown_mu_prior
         self.unknown_kappa_prior = unknown_kappa_prior
