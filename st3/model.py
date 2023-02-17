@@ -2,7 +2,7 @@ from pkg_resources import resource_filename
 from multiprocessing import Pool
 
 import biom
-from cmdstanpy import CmdStanModel
+from cmdstanpy import CmdStanModel, CmdStanVB
 import numpy as np
 import pandas as pd
 
@@ -65,10 +65,17 @@ class STResults:
         self.sources = sources + ["Unknown"]
         self.sinks = sinks
 
+    def __getitem__(self, index: int):
+        return self.results[index]
+
     def __len__(self):
         return len(self.results)
 
+    def __iter__(self):
+        return iter(self.results)
+
     def to_dataframe(self):
+        """Get estimated mixing proportions as Pandas DataFrame."""
         results = [
             x.variational_params_pd.filter(like="mix_prop")
             for x in self.results
