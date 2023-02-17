@@ -23,6 +23,13 @@ class SourceTracker:
 
         :param source_table: Feature table of sources by features
         :type source_table: biom.Table
+
+        :param unknown_mu_prior: Prior belief for unknown proportion, default
+            0.2
+        :type unknonw_mu_prior: float
+
+        :param unknown_kappa_prior: Prior belief for kappa parameter for beta
+            proprotion distribution, default 10
         """
         self.features = list(source_table.ids("observation"))
         self.sources = list(source_table.ids("sample"))
@@ -31,7 +38,18 @@ class SourceTracker:
         self.unknown_mu_prior = unknown_mu_prior
         self.unknown_kappa_prior = unknown_kappa_prior
 
-    def fit(self, sinks: biom.Table, jobs: int = 1):
+    def fit(self, sinks: biom.Table, jobs: int = 1) -> "STResults":
+        """Fit SourceTracker model on multiple sink samples.
+
+        :param sinks: Table of sink samples
+        :type sinks: biom.Table
+
+        :param jobs: Number of jobs to run in parallel, default 1
+        :type jobs: int
+
+        :returns: Results of each sink's fitted model
+        :rtype: st3.model.STResults
+        """
         # Make sure order of features is the same
         sink_data = (
             sinks
@@ -46,7 +64,15 @@ class SourceTracker:
         results = STResults(results, self.sources, sinks.ids())
         return results
 
-    def _fit_single(self, sink: np.array):
+    def _fit_single(self, sink: np.array) -> CmdStanVB:
+        """Fit a single sink sample.
+
+        :param sink: Array of taxa counts in same order as source table
+        :type sink: np.array
+
+        :returns: Model fitted through variational inference
+        :rtype: CmdStanPy.CmdStanVB
+        """
         data = {
             "N": self.num_features,
             "x": sink.astype(int),
@@ -61,6 +87,7 @@ class SourceTracker:
 
 class STResults:
     def __init__(self, results: list, sources: list, sinks: list):
+        """Container for results from SourceTracker."""
         self.results = results
         self.sources = sources + ["Unknown"]
         self.sinks = sinks
@@ -74,7 +101,7 @@ class STResults:
     def __iter__(self):
         return iter(self.results)
 
-    def to_dataframe(self):
+    def to_dataframe(self) -> pd.DataFrame:
         """Get estimated mixing proportions as Pandas DataFrame."""
         results = [
             x.variational_params_pd.filter(like="mix_prop")
