@@ -10,7 +10,7 @@ from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
 
-MODEL_PATH = resource_filename("st3", "stan/feast.stan")
+MODEL_PATH = resource_filename("st3", "stan/sourcetracker.stan")
 MODEL = CmdStanModel(stan_file=MODEL_PATH)
 
 
