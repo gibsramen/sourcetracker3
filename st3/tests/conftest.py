@@ -1,11 +1,13 @@
-import os
+import pathlib
+from pkg_resources import resource_filename
 
 import biom
 import pandas as pd
 import pytest
 
-TEST_TBL = os.path.join(os.path.dirname(__file__), "test_data/table.biom")
-TEST_MD = os.path.join(os.path.dirname(__file__), "test_data/metadata.tsv")
+TEST_DATA_DIR = pathlib.Path(resource_filename("st3", "tests/test_data"))
+TEST_TBL = TEST_DATA_DIR / "table.biom"
+TEST_MD = TEST_DATA_DIR / "metadata.tsv"
 
 
 @pytest.fixture(scope="session")
