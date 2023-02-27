@@ -5,6 +5,6 @@ setup(
     author="Gibraan Rahman",
     packages=find_packages(),
     include_package_data=True,
-    package_data={"": ["*.stan"]},
+    package_data={"": ["*.stan", "st3/tests/test_data/*"]},
     data_files=[("st3/tests/test_data", ["table.biom", "metadata.tsv"])]
 )
