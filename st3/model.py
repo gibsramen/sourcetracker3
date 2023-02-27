@@ -1,5 +1,4 @@
 from functools import partial
-from multiprocessing import Pool
 import pathlib
 from pkg_resources import resource_filename
 from tempfile import TemporaryDirectory
