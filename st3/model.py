@@ -1,8 +1,12 @@
-from pkg_resources import resource_filename
+from functools import partial
 from multiprocessing import Pool
+import pathlib
+from pkg_resources import resource_filename
+from tempfile import TemporaryDirectory
 
 import biom
 from cmdstanpy import CmdStanModel, CmdStanVB
+from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
 
@@ -26,10 +30,11 @@ class SourceTracker:
 
         :param unknown_mu_prior: Prior belief for unknown proportion, default
             0.2
-        :type unknonw_mu_prior: float
+        :type unknown_mu_prior: float
 
         :param unknown_kappa_prior: Prior belief for kappa parameter for beta
             proprotion distribution, default 10
+        :type unknown_kappa_prior: float
         """
         self.features = list(source_table.ids("observation"))
         self.sources = list(source_table.ids("sample"))
@@ -38,7 +43,8 @@ class SourceTracker:
         self.unknown_mu_prior = unknown_mu_prior
         self.unknown_kappa_prior = unknown_kappa_prior
 
-    def fit(self, sinks: biom.Table, jobs: int = 1) -> "STResults":
+    def fit(self, sinks: biom.Table, jobs: int = 1, parallel_args: dict = None,
+            temp_dir: pathlib.Path = None, **kwargs) -> "STResults":
         """Fit SourceTracker model on multiple sink samples.
 
         :param sinks: Table of sink samples
@@ -46,6 +52,15 @@ class SourceTracker:
 
         :param jobs: Number of jobs to run in parallel, default 1
         :type jobs: int
+
+        :param parallel_args: Arguments to pass to joblib.Parallel
+        :type parallel_args: dict
+
+        :param temp_dir: Temporary directory in which to save intermediate
+            CSVs creating during sampling
+        :type temp_dir: pathlib.Path
+
+        :param **kwargs: Keyword arguments to pass to CmdStanModel.variational
 
         :returns: Results of each sink's fitted model
         :rtype: st3.model.STResults
@@ -58,17 +73,28 @@ class SourceTracker:
             .toarray()
             .T
         )
-        with Pool(jobs) as p:
-            results = p.map(self._fit_single, sink_data)
+
+        func = partial(self._fit_single, temp_dir=temp_dir, **kwargs)
+        parallel_args = parallel_args or dict()
+        results = Parallel(n_jobs=jobs, **parallel_args)(
+            delayed(func)(vals) for vals in sink_data
+        )
 
         results = STResults(results, self.sources, sinks.ids())
         return results
 
-    def _fit_single(self, sink: np.array) -> CmdStanVB:
+    def _fit_single(self, sink: np.array, temp_dir: pathlib.Path,
+                    **kwargs) -> CmdStanVB:
         """Fit a single sink sample.
 
         :param sink: Array of taxa counts in same order as source table
         :type sink: np.array
+
+        :param temp_dir: Temporary directory in which to save intermediate
+            CSVs creating during sampling
+        :type temp_dir: pathlib.Path
+
+        :param **kwargs: Keyword arguments to pass to CmdStanModel.variational
 
         :returns: Model fitted through variational inference
         :rtype: CmdStanPy.CmdStanVB
@@ -81,7 +107,13 @@ class SourceTracker:
             "unknown_mu": self.unknown_mu_prior,
             "unknown_kappa": self.unknown_kappa_prior
         }
-        results = MODEL.variational(data=data)
+
+        if temp_dir is not None:
+            with TemporaryDirectory(dir=temp_dir) as output_dir:
+                results = MODEL.variational(data=data, output_dir=output_dir,
+                                            **kwargs)
+        else:
+            results = MODEL.variational(data=data, **kwargs)
         return results
 
 
