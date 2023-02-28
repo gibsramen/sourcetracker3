@@ -96,7 +96,7 @@ class SourceTracker:
         :param **kwargs: Keyword arguments to pass to CmdStanModel.variational
 
         :returns: Model fitted through variational inference
-        :rtype: CmdStanPy.CmdStanVB
+        :rtype: cmdstanpy.CmdStanVB
         """
         data = {
             "N": self.num_features,
