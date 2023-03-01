@@ -38,12 +38,18 @@ class SourceTracker:
         self.features = list(source_table.ids("observation"))
         self.sources = list(source_table.ids("sample"))
         self.num_features, self.num_sources = source_table.shape
-        self.source_data = source_table.matrix_data.toarray().T
+        self.source_data = source_table.matrix_data.T.toarray()
         self.unknown_mu_prior = unknown_mu_prior
         self.unknown_kappa_prior = unknown_kappa_prior
 
-    def fit(self, sinks: biom.Table, jobs: int = 1, parallel_args: dict = None,
-            temp_dir: pathlib.Path = None, **kwargs) -> "STResults":
+    def fit(
+        self,
+        sinks: biom.Table,
+        jobs: int = 1,
+        parallel_args: dict = None,
+        temp_dir: pathlib.Path = None,
+        **kwargs
+    ) -> "STResults":
         """Fit SourceTracker model on multiple sink samples.
 
         :param sinks: Table of sink samples
@@ -64,19 +70,14 @@ class SourceTracker:
         :returns: Results of each sink's fitted model
         :rtype: st3.model.STResults
         """
-        # Make sure order of features is the same
-        sink_data = (
-            sinks
-            .filter(self.features, "observation", inplace=False)
-            .matrix_data
-            .toarray()
-            .T
-        )
-
         func = partial(self._fit_single, temp_dir=temp_dir, **kwargs)
         parallel_args = parallel_args or dict()
+
+        # Make sure order of features is the same
+        sink_data = sinks.filter(self.features, "observation", inplace=False)
+
         results = Parallel(n_jobs=jobs, **parallel_args)(
-            delayed(func)(vals) for vals in sink_data
+            delayed(func)(vals) for vals in sink_data.iter_data()
         )
 
         results = STResults(results, self.sources, sinks.ids())
@@ -108,6 +109,7 @@ class SourceTracker:
         }
 
         if temp_dir is not None:
+            # Create a subdirectory in temp_dir for each sink sample
             with TemporaryDirectory(dir=temp_dir) as output_dir:
                 results = MODEL.variational(data=data, output_dir=output_dir,
                                             **kwargs)

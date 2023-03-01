@@ -1,4 +1,5 @@
 from cmdstanpy import CmdStanVB
+import numpy as np
 import pytest
 
 from st3.model import SourceTracker
@@ -26,6 +27,8 @@ def test_results_to_df(st3_model, st3_model_results):
     sink_tbl, _ = st3_model
     results_df = st3_model_results.to_dataframe()
     assert results_df.shape == (10, 6)
+
+    np.testing.assert_allclose(results_df.sum(1), np.ones(10), atol=0.001)
 
     sink_ids = sink_tbl.ids("sample")
     assert (sink_ids == results_df.index).all()
