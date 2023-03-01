@@ -1,3 +1,6 @@
+import biom
+import numpy as np
+import pandas as pd
 import pytest
 
 import st3.utils as utils
@@ -5,20 +8,53 @@ import st3.utils as utils
 
 class TestCollapseData:
     @pytest.fixture(autouse=True)
-    def setup_example_data(self, example_data):
-        self.table, self.metadata = example_data
+    def setup_example_data(self):
+        tbl_data = np.array([
+            [4.0, 4.0, 5.0, 1.0, 7.0, 1.0, 4.0],
+            [2.0, 2.0, 5.0, 4.0, 1.0, 6.0, 2.0],
+            [5.0, 0.0, 2.0, 2.0, 3.0, 4.0, 0.0],
+        ])
+        sample_ids = ["A", "B", "C", "D", "X", "Y", "Z"]
+        taxa_ids = ["Taxa_1", "Taxa_2", "Taxa_3"]
+
+        self.table = biom.Table(tbl_data, sample_ids=sample_ids,
+                                observation_ids=taxa_ids)
+
+        sourcesink = ["source"] * 4 + ["sink"] * 3
+        env = ["Env_1", "Env_1", "Env_2", "Env_2"] + ["sink"] * 3
+        self.metadata = pd.DataFrame(dict(Env=env, SourceSink=sourcesink),
+                                     index=sample_ids)
         self.source_tbl, self.sink_tbl = (
             utils.collapse_data(self.table, self.metadata)
         )
 
+        self.exp_source_data = np.array([
+            [8.0, 6.0],
+            [4.0, 9.0],
+            [5.0, 4.0]
+        ])
+
+        self.exp_sink_data = np.array([
+            [7.0, 1.0, 4.0],
+            [1.0, 6.0, 2.0],
+            [3.0, 4.0, 0.0]
+        ])
+
     def test_collapse_data(self):
-        # Should be 20 taxa, 5 (known) sources, 10 sinks
-        assert self.source_tbl.shape == (20, 5)
-        assert self.sink_tbl.shape == (20, 10)
+        # Should be 3 taxa, 2 (known) sources, 3 sinks
+        assert self.source_tbl.shape == (3, 2)
+        assert self.sink_tbl.shape == (3, 3)
 
         source_taxa = self.source_tbl.ids("observation")
         sink_taxa = self.sink_tbl.ids("observation")
         assert (source_taxa == sink_taxa).all()
+
+        np.testing.assert_equal(
+            self.exp_source_data, self.source_tbl.matrix_data.todense()
+        )
+        np.testing.assert_equal(
+            self.exp_sink_data, self.sink_tbl.matrix_data.todense()
+        )
 
     def test_sourcesink_column(self):
         metadata_new = self.metadata.copy()
