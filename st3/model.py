@@ -31,7 +31,7 @@ class STBase(ABC):
         self,
         sink: np.array,
         source_data: np.array,
-        temp_dir: pathlib.Path,
+        temp_dir: pathlib.Path = None,
         **kwargs
     ) -> CmdStanVB:
         """Fit a single sink sample.
@@ -147,6 +147,75 @@ class SourceTracker(STBase):
 
         results = STResults(results, self.sources, sinks.ids())
         return results
+
+
+class SourceTrackerLOO(STBase):
+    def __init__(
+        self,
+        table: biom.Table,
+        metadata: pd.DataFrame,
+        sourcesink_column: str = "SourceSink",
+        env_column: str = "Env",
+        source_name: str = "source",
+        sink_name: str = "sink",
+        unknown_mu_prior: float = 0.2,
+        unknown_kappa_prior: float = 10
+    ):
+        self.metadata = metadata
+        self.sources = list(
+            metadata[metadata[sourcesink_column] == source_name][env_column]
+            .unique()
+        )
+        self.table = table
+        self.samples = table.ids()
+        self.source_map = self.metadata[env_column].to_dict()
+
+        super().__init__(
+            num_features=table.shape[0],
+            num_sources=len(self.sources),
+            unknown_mu_prior=unknown_mu_prior,
+            unknown_kappa_prior=unknown_kappa_prior
+        )
+
+    def fit(
+        self,
+        jobs: int = 1,
+        parallel_args: dict = None,
+        temp_dir: pathlib.Path = None,
+        **kwargs
+    ) -> "STResults":
+        func = partial(self._fit_single, temp_dir=temp_dir, **kwargs)
+        parallel_args = parallel_args or dict()
+
+        results = Parallel(n_jobs=jobs, **parallel_args)(
+            delayed(func)(samp_name) for samp_name in self.samples
+        )
+
+        results = STResults(results, self.sources, self.samples)
+        return results
+
+    def _fit_single(
+        self,
+        sample_name: str,
+        temp_dir: pathlib.Path,
+        **kwargs
+    ):
+        source_data, sink = self._get_source_sink(sample_name)
+        results = super()._fit_single(
+            sink, source_data, temp_dir=temp_dir, **kwargs
+        )
+        return results
+
+    def _get_source_sink(self, sample_name: str):
+        sink = self.table.data(sample_name)
+        non_sink_ids = [x for x in self.samples if x != sample_name]
+        source_tbl = self.table.filter(non_sink_ids, inplace=False)
+
+        source_data = (
+            source_tbl.collapse(lambda s, m: self.source_map[s], norm=False)
+            .matrix_data.T.toarray()
+        )
+        return source_data, sink
 
 
 class STResults:
