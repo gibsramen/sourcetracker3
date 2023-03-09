@@ -1,6 +1,6 @@
 import pytest
 
-from st3.model import SourceTrackerLOO
+from st3.model import SourceTrackerLOO, SourceTrackerLOOCollapsed
 
 
 @pytest.fixture
@@ -15,8 +15,12 @@ def example_data_loo(example_data):
 def test_st3_loo(example_data_loo):
     table, metadata = example_data_loo
     st3_loo = SourceTrackerLOO(table, metadata)
-    # source, sink = st3_loo._get_source_sink("SRC_1_SAMP_1")
     results = st3_loo.fit()
     results_df = results.to_dataframe()
-    print(results_df)
-    assert 0
+
+
+def test_st3_loo_collapsed(example_data_loo):
+    table, metadata = example_data_loo
+    st3_loo_coll = SourceTrackerLOOCollapsed(table, metadata)
+    results = st3_loo_coll.fit()
+    results_df = results.to_dataframe()

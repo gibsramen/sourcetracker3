@@ -10,6 +10,8 @@ from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
 
+from .utils import collapse_data
+
 MODEL_PATH = resource_filename("st3", "stan/sourcetracker.stan")
 MODEL = CmdStanModel(stan_file=MODEL_PATH)
 
@@ -218,6 +220,88 @@ class SourceTrackerLOO(STBase):
         return source_data, sink
 
 
+class SourceTrackerLOOCollapsed(STBase):
+    def __init__(
+        self,
+        table: biom.Table,
+        metadata: pd.DataFrame,
+        sourcesink_column: str = "SourceSink",
+        env_column: str = "Env",
+        source_name: str = "source",
+        sink_name: str = "sink",
+        unknown_mu_prior: float = 0.2,
+        unknown_kappa_prior: float = 10
+    ):
+        self.metadata = metadata
+        self.sources = list(
+            metadata[metadata[sourcesink_column] == source_name][env_column]
+            .unique()
+        )
+        self.table = table
+        self.samples = table.ids()
+        self.source_map = self.metadata[env_column].to_dict()
+        self.sourcesink_column = sourcesink_column
+        self.env_column = env_column
+        self.source_name = source_name
+        self.sink_name = sink_name
+
+        super().__init__(
+            num_features=table.shape[0],
+            num_sources=len(self.sources) - 1,  # Subtract 1 for LOO
+            unknown_mu_prior=unknown_mu_prior,
+            unknown_kappa_prior=unknown_kappa_prior
+        )
+
+    def fit(
+        self,
+        jobs: int = 1,
+        parallel_args: dict = None,
+        temp_dir: pathlib.Path = None,
+        **kwargs
+    ) -> "STResults":
+        func = partial(self._fit_single, temp_dir=temp_dir, **kwargs)
+        parallel_args = parallel_args or dict()
+
+        results = Parallel(n_jobs=jobs, **parallel_args)(
+            delayed(func)(source) for source in self.sources
+        )
+        results = STResultsLOOCollapsed(results, self.sources)
+        return results
+
+    def _fit_single(
+        self,
+        left_out_source: str,
+        temp_dir: pathlib.Path,
+        **kwargs
+    ) -> CmdStanVB:
+        source_data, sink_data = self._leave_source_out(left_out_source)
+        results = super()._fit_single(
+            sink_data, source_data, temp_dir=temp_dir, **kwargs
+        )
+        return results
+
+    def _leave_source_out(
+        self,
+        left_out_source: str
+    ) -> (np.array, np.array):
+        md_copy = self.metadata.copy()
+        source_map = {
+            x: "source" if x != left_out_source else "sink"
+            for x in self.sources
+        }
+        md_copy["LOO"] = md_copy[self.env_column].map(source_map)
+
+        source_data, sink_data = collapse_data(
+            self.table,
+            md_copy,
+            "LOO",
+            self.env_column
+        )
+        sink_data = sink_data.sum("observation")
+        source_data = source_data.matrix_data.T.toarray()
+        return source_data, sink_data
+
+
 class STResults:
     def __init__(self, results: list, sources: list, sinks: list):
         """Container for results from SourceTracker."""
@@ -243,4 +327,21 @@ class STResults:
         results = pd.concat(results)
         results.columns = self.sources
         results.index = self.sinks
+        return results
+
+
+class STResultsLOOCollapsed(STResults):
+    def __init__(self, results: list, sources: list):
+        self.results = results
+        self.sources = sources
+
+    def to_dataframe(self) -> pd.DataFrame:
+        results = []
+        for i, (src, res) in enumerate(zip(self. sources, self.results)):
+            mix_props = res.variational_params_pd.filter(like="mix_prop")
+            _sources = self.sources[:i] + self.sources[i+1:] + ["Unknown"]
+            mix_props.columns = _sources
+            results.append(mix_props)
+        results = pd.concat(results)[self.sources + ["Unknown"]]
+        results.index = self.sources
         return results
