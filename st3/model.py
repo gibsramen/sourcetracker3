@@ -271,7 +271,7 @@ class SourceTrackerLOO(STBase):
         sample_name: str,
         temp_dir: pathlib.Path,
         **kwargs
-    ):
+    ) -> CmdStanVB:
         """Fit a single hold-out sample.
 
         :param sample_name: Name of training sample to use as hold-out
@@ -412,6 +412,20 @@ class SourceTrackerLOOCollapsed(STBase):
         temp_dir: pathlib.Path,
         **kwargs
     ) -> CmdStanVB:
+        """Fit a single sink sample.
+
+        :param left_out_source: Source to hold-out during model fitting
+        :type left_out_source: str
+
+        :param temp_dir: Temporary directory in which to save intermediate
+            CSVs creating during sampling
+        :type temp_dir: pathlib.Path
+
+        :param **kwargs: Keyword arguments to pass to CmdStanModel.variational
+
+        :returns: Model fitted through variational inference
+        :rtype: cmdstanpy.CmdStanVB
+        """
         source_data, sink_data = self._leave_source_out(left_out_source)
         results = super()._fit_single(
             sink_data, source_data, temp_dir=temp_dir, **kwargs
