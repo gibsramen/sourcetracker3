@@ -10,6 +10,7 @@ from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
 
+from ._results import STResults, STResultsLOOCollapsed
 from .utils import collapse_data
 
 MODEL_PATH = resource_filename("st3", "stan/sourcetracker.stan")
@@ -132,7 +133,7 @@ class SourceTracker(STBase):
         parallel_args: dict = None,
         temp_dir: pathlib.Path = None,
         **kwargs
-    ) -> "STResults":
+    ) -> STResults:
         """Fit SourceTracker model on multiple sink samples.
 
         :param sinks: Table of sink samples
@@ -151,7 +152,7 @@ class SourceTracker(STBase):
         :param **kwargs: Keyword arguments to pass to CmdStanModel.variational
 
         :returns: Results of each sink's fitted model
-        :rtype: st3.model.STResults
+        :rtype: st3._results.STResults
         """
         func = partial(self._fit_single, source_data=self.source_data,
                        temp_dir=temp_dir, **kwargs)
@@ -237,7 +238,7 @@ class SourceTrackerLOO(STBase):
         parallel_args: dict = None,
         temp_dir: pathlib.Path = None,
         **kwargs
-    ) -> "STResults":
+    ) -> STResults:
         """Fit SourceTracker model on each training sample as hold-out.
 
         :param jobs: Number of jobs to run in parallel, default 1
@@ -253,7 +254,7 @@ class SourceTrackerLOO(STBase):
         :param **kwargs: Keyword arguments to pass to CmdStanModel.variational
 
         :returns: Results of each sink's fitted model
-        :rtype: st3.model.STResults
+        :rtype: st3._results.STResults
         """
         func = partial(self._fit_single, temp_dir=temp_dir, **kwargs)
         parallel_args = parallel_args or dict()
@@ -378,7 +379,7 @@ class SourceTrackerLOOCollapsed(STBase):
         parallel_args: dict = None,
         temp_dir: pathlib.Path = None,
         **kwargs
-    ) -> "STResultsLOOCollapsed":
+    ) -> STResultsLOOCollapsed:
         """Fit SourceTracker model on each source as hold-out.
 
         :param jobs: Number of jobs to run in parallel, default 1
@@ -394,7 +395,7 @@ class SourceTrackerLOOCollapsed(STBase):
         :param **kwargs: Keyword arguments to pass to CmdStanModel.variational
 
         :returns: Results of each source's fitted model
-        :rtype: st3.model.STResultsLOOCollapsed
+        :rtype: st3._results.STResultsLOOCollapsed
         """
         func = partial(self._fit_single, temp_dir=temp_dir, **kwargs)
         parallel_args = parallel_args or dict()
@@ -442,52 +443,3 @@ class SourceTrackerLOOCollapsed(STBase):
         sink_data = sink_data.sum("observation")
         source_data = source_data.matrix_data.T.toarray()
         return source_data, sink_data
-
-
-class STResults:
-    def __init__(self, results: list, sources: list, sinks: list):
-        """Container for results from SourceTracker."""
-        self.results = results
-        self.sources = sources + ["Unknown"]
-        self.sinks = sinks
-
-    def __getitem__(self, index: int):
-        return self.results[index]
-
-    def __len__(self):
-        return len(self.results)
-
-    def __iter__(self):
-        return iter(self.results)
-
-    def to_dataframe(self) -> pd.DataFrame:
-        """Get estimated mixing proportions as Pandas DataFrame."""
-        results = [
-            x.variational_params_pd.filter(like="mix_prop")
-            for x in self.results
-        ]
-        results = pd.concat(results)
-        results.columns = self.sources
-        results.index = self.sinks
-        return results
-
-
-class STResultsLOOCollapsed(STResults):
-    def __init__(self, results: list, sources: list):
-        """Container for results from SourceTrackerLOOCollapsed."""
-        self.results = results
-        self.sources = sources
-
-    def to_dataframe(self) -> pd.DataFrame:
-        """Get estimated mixing proportions as Pandas DataFrame."""
-        results = []
-        # For each result, get remaining sources by subsetting source list
-        for i, (src, res) in enumerate(zip(self. sources, self.results)):
-            mix_props = res.variational_params_pd.filter(like="mix_prop")
-            _sources = self.sources[:i] + self.sources[i+1:] + ["Unknown"]
-            mix_props.columns = _sources
-            results.append(mix_props)
-
-        results = pd.concat(results)[self.sources + ["Unknown"]]
-        results.index = self.sources
-        return results
