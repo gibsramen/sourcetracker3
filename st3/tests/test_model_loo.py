@@ -18,9 +18,20 @@ def test_st3_loo(example_data_loo):
     results = st3_loo.fit()
     results_df = results.to_dataframe()
 
+    exp_cols = [f"SRC_{x+1}" for x in range(5)] + ["Unknown"]
+    assert list(results_df.columns) == exp_cols
+
+    assert (metadata.index == results_df.index).all()
+
 
 def test_st3_loo_collapsed(example_data_loo):
     table, metadata = example_data_loo
     st3_loo_coll = SourceTrackerLOOCollapsed(table, metadata)
     results = st3_loo_coll.fit()
     results_df = results.to_dataframe()
+
+    exp_cols = [f"SRC_{x+1}" for x in range(5)] + ["Unknown"]
+    assert list(results_df.columns) == exp_cols
+
+    exp_sources = [f"SRC_{x+1}" for x in range(5)]
+    assert list(results_df.index) == exp_sources
