@@ -24,6 +24,22 @@ class STBase(ABC):
         unknown_mu_prior: float = 0.2,
         unknown_kappa_prior: float = 10
     ):
+        """Base SourceTracker instance
+
+        :param num_features: Number of features in dataset
+        :type num_features: int
+
+        :param num_sources: Number of sources to consider
+        :type num_sources: int
+
+        :param unknown_mu_prior: Prior belief for unknown proportion, default
+            0.2
+        :type unknown_mu_prior: float
+
+        :param unknown_kappa_prior: Prior belief for kappa parameter for beta
+            proprotion distribution, default 10
+        :type unknown_kappa_prior: float
+        """
         self.num_features = num_features
         self.num_sources = num_sources
         self.unknown_mu_prior = unknown_mu_prior
@@ -73,6 +89,7 @@ class STBase(ABC):
 
     @abstractmethod
     def fit(self):
+        """Abstract method for fitting sink data"""
         pass
 
 
@@ -163,7 +180,42 @@ class SourceTrackerLOO(STBase):
         unknown_mu_prior: float = 0.2,
         unknown_kappa_prior: float = 10
     ):
+        """Initialize SourceTracker instance for leave-out-sample out
+
+        Creates a SourceTracker instance for leaving each training sample out.
+
+        :param table: Feature table of training samples by features
+        :type table: biom.Table
+
+        :param metadata: Sample metadata
+        :type metadata: pd.DataFrame
+
+        :param sourcesink_column: Name of column in sample metadata denoting
+            which samples are sources and which are sinks, default 'SourceSink'
+        :type sourcesink_column: str
+
+        :param env_column: Name of column in sample metadata with environment
+            names, default 'Env'
+        :type env_column: str
+
+        :param source_name: Level in sourcesink_column corresponding to source
+            samples, default 'source'
+        :type source_name: str
+
+        :param sink_name: Level in sourcesink_column corresponding to sink
+            samples, default 'sink'
+        :type sink_name: str
+
+        :param unknown_mu_prior: Prior belief for unknown proportion, default
+            0.2
+        :type unknown_mu_prior: float
+
+        :param unknown_kappa_prior: Prior belief for kappa parameter for beta
+            proprotion distribution, default 10
+        :type unknown_kappa_prior: float
+        """
         self.metadata = metadata
+
         self.sources = list(
             metadata[metadata[sourcesink_column] == source_name][env_column]
             .unique()
@@ -186,6 +238,23 @@ class SourceTrackerLOO(STBase):
         temp_dir: pathlib.Path = None,
         **kwargs
     ) -> "STResults":
+        """Fit SourceTracker model on each training sample as hold-out.
+
+        :param jobs: Number of jobs to run in parallel, default 1
+        :type jobs: int
+
+        :param parallel_args: Arguments to pass to joblib.Parallel
+        :type parallel_args: dict
+
+        :param temp_dir: Temporary directory in which to save intermediate
+            CSVs creating during sampling
+        :type temp_dir: pathlib.Path
+
+        :param **kwargs: Keyword arguments to pass to CmdStanModel.variational
+
+        :returns: Results of each sink's fitted model
+        :rtype: st3.model.STResults
+        """
         func = partial(self._fit_single, temp_dir=temp_dir, **kwargs)
         parallel_args = parallel_args or dict()
 
@@ -202,13 +271,35 @@ class SourceTrackerLOO(STBase):
         temp_dir: pathlib.Path,
         **kwargs
     ):
+        """Fit a single hold-out sample.
+
+        :param sample_name: Name of training sample to use as hold-out
+        :type sample_name: str
+
+        :param temp_dir: Temporary directory in which to save intermediate
+            CSVs creating during sampling
+        :type temp_dir: pathlib.Path
+
+        :param **kwargs: Keyword arguments to pass to CmdStanModel.variational
+
+        :returns: Model fitted through variational inference
+        :rtype: cmdstanpy.CmdStanVB
+        """
         source_data, sink = self._get_source_sink(sample_name)
         results = super()._fit_single(
             sink, source_data, temp_dir=temp_dir, **kwargs
         )
         return results
 
-    def _get_source_sink(self, sample_name: str):
+    def _get_source_sink(self, sample_name: str) -> (np.array, np.array):
+        """Gets training table and hold-out sample data
+
+        :param sample_name: Name of training sample to use as hold-out
+        :type sample_name: str
+
+        :returns: Training source table, held-out sink data
+        :rtype: (np.array, np.arrary)
+        """
         sink = self.table.data(sample_name)
         non_sink_ids = [x for x in self.samples if x != sample_name]
         source_tbl = self.table.filter(non_sink_ids, inplace=False)
@@ -228,11 +319,41 @@ class SourceTrackerLOOCollapsed(STBase):
         sourcesink_column: str = "SourceSink",
         env_column: str = "Env",
         source_name: str = "source",
-        sink_name: str = "sink",
         unknown_mu_prior: float = 0.2,
         unknown_kappa_prior: float = 10
     ):
+        """Initialize SourceTracker instance for leave-out-source out
+
+        Creates a SourceTracker instance for leaving each source out.
+
+        :param table: Feature table of training samples by features
+        :type table: biom.Table
+
+        :param metadata: Sample metadata
+        :type metadata: pd.DataFrame
+
+        :param sourcesink_column: Name of column in sample metadata denoting
+            which samples are sources and which are sinks, default 'SourceSink'
+        :type sourcesink_column: str
+
+        :param env_column: Name of column in sample metadata with environment
+            names, default 'Env'
+        :type env_column: str
+
+        :param source_name: Level in sourcesink_column corresponding to source
+            samples, default 'source'
+        :type source_name: str
+
+        :param unknown_mu_prior: Prior belief for unknown proportion, default
+            0.2
+        :type unknown_mu_prior: float
+
+        :param unknown_kappa_prior: Prior belief for kappa parameter for beta
+            proprotion distribution, default 10
+        :type unknown_kappa_prior: float
+        """
         self.metadata = metadata
+
         self.sources = list(
             metadata[metadata[sourcesink_column] == source_name][env_column]
             .unique()
@@ -243,7 +364,6 @@ class SourceTrackerLOOCollapsed(STBase):
         self.sourcesink_column = sourcesink_column
         self.env_column = env_column
         self.source_name = source_name
-        self.sink_name = sink_name
 
         super().__init__(
             num_features=table.shape[0],
@@ -258,7 +378,24 @@ class SourceTrackerLOOCollapsed(STBase):
         parallel_args: dict = None,
         temp_dir: pathlib.Path = None,
         **kwargs
-    ) -> "STResults":
+    ) -> "STResultsLOOCollapsed":
+        """Fit SourceTracker model on each source as hold-out.
+
+        :param jobs: Number of jobs to run in parallel, default 1
+        :type jobs: int
+
+        :param parallel_args: Arguments to pass to joblib.Parallel
+        :type parallel_args: dict
+
+        :param temp_dir: Temporary directory in which to save intermediate
+            CSVs creating during sampling
+        :type temp_dir: pathlib.Path
+
+        :param **kwargs: Keyword arguments to pass to CmdStanModel.variational
+
+        :returns: Results of each source's fitted model
+        :rtype: st3.model.STResultsLOOCollapsed
+        """
         func = partial(self._fit_single, temp_dir=temp_dir, **kwargs)
         parallel_args = parallel_args or dict()
 
@@ -280,10 +417,15 @@ class SourceTrackerLOOCollapsed(STBase):
         )
         return results
 
-    def _leave_source_out(
-        self,
-        left_out_source: str
-    ) -> (np.array, np.array):
+    def _leave_source_out(self, left_out_source: str) -> (np.array, np.array):
+        """Get training and sink data for held-out source
+
+        :param left_out_source: Source to hold-out during model fitting
+        :type left_out_source: str
+
+        :returns: Training source table, held-out source data
+        :rtype: (np.array, np.arrary)
+        """
         md_copy = self.metadata.copy()
         source_map = {
             x: "source" if x != left_out_source else "sink"
@@ -332,16 +474,20 @@ class STResults:
 
 class STResultsLOOCollapsed(STResults):
     def __init__(self, results: list, sources: list):
+        """Container for results from SourceTrackerLOOCollapsed."""
         self.results = results
         self.sources = sources
 
     def to_dataframe(self) -> pd.DataFrame:
+        """Get estimated mixing proportions as Pandas DataFrame."""
         results = []
+        # For each result, get remaining sources by subsetting source list
         for i, (src, res) in enumerate(zip(self. sources, self.results)):
             mix_props = res.variational_params_pd.filter(like="mix_prop")
             _sources = self.sources[:i] + self.sources[i+1:] + ["Unknown"]
             mix_props.columns = _sources
             results.append(mix_props)
+
         results = pd.concat(results)[self.sources + ["Unknown"]]
         results.index = self.sources
         return results
