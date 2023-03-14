@@ -1,3 +1,5 @@
+import numpy as np
+import pandas as pd
 import pytest
 
 from st3.model import SourceTrackerLOO, SourceTrackerLOOCollapsed
@@ -35,3 +37,7 @@ def test_st3_loo_collapsed(example_data_loo):
 
     exp_sources = [f"SRC_{x+1}" for x in range(5)]
     assert list(results_df.index) == exp_sources
+
+    for src, row in results_df.iterrows():
+        assert pd.isna(row[src])
+        np.testing.assert_almost_equal(row.sum(), 1, decimal=4)

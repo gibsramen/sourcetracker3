@@ -164,8 +164,9 @@ class SourceTracker(STBase):
         results = Parallel(n_jobs=jobs, **parallel_args)(
             delayed(func)(vals) for vals in sink_data.iter_data()
         )
+        results = dict(zip(sinks.ids(), results))
 
-        results = STResults(results, self.sources, sinks.ids())
+        results = STResults(results, self.sources)
         return results
 
 
@@ -262,8 +263,9 @@ class SourceTrackerLOO(STBase):
         results = Parallel(n_jobs=jobs, **parallel_args)(
             delayed(func)(samp_name) for samp_name in self.samples
         )
+        results = dict(zip(self.samples, results))
 
-        results = STResults(results, self.sources, self.samples)
+        results = STResults(results, self.sources)
         return results
 
     def _fit_single(
@@ -403,7 +405,9 @@ class SourceTrackerLOOCollapsed(STBase):
         results = Parallel(n_jobs=jobs, **parallel_args)(
             delayed(func)(source) for source in self.sources
         )
-        results = STResultsLOOCollapsed(results, self.sources)
+        results = dict(zip(self.sources, results))
+
+        results = STResultsLOOCollapsed(results)
         return results
 
     def _fit_single(
