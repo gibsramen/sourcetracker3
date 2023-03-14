@@ -19,8 +19,15 @@ def st3_model_results(st3_model):
     return model.fit(sink_tbl)
 
 
+def test_results(st3_model, st3_model_results):
+    sink_tbl, _ = st3_model
+    assert list(st3_model_results.results.keys()) == list(sink_tbl.ids())
+
+
 def test_results_type(st3_model_results):
-    assert all([isinstance(r, CmdStanVB) for r in st3_model_results])
+    assert all([
+        isinstance(r, CmdStanVB) for _, r in st3_model_results.results.items()
+    ])
 
 
 def test_results_to_df(st3_model, st3_model_results):
