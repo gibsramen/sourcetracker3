@@ -1,3 +1,3 @@
-from .model import SourceTracker
+from .model import SourceTracker, SourceTrackerLOO, SourceTrackerLOOCollapsed
 
-__all__ = ["SourceTracker", "SourceTrackerLOO"]
+__all__ = ["SourceTracker", "SourceTrackerLOO", "SourceTrackerLOOCollapsed"]
